@@ -173,9 +173,17 @@ table.hm{border-collapse:collapse;min-width:700px;width:100%;}
     </div>
     <span style="font-size:10px;color:var(--muted);font-style:italic;margin-left:4px;">Data behind reporting &mdash; May 8&ndash;14</span>
   </div>
+  <div class="ctrl-bar" id="hmLocBar">
+    <span class="ctrl-label">Location:</span>
+    <select class="ctrl-select" id="hmLocSelect" onchange="setHmLoc(this.value)" style="min-width:240px;"></select>
+  </div>
   <div class="heatmap-wrap">
     <div class="heatmap-title" id="hmTitle">TPPH Heatmap &mdash; All Days Average</div>
     <table class="hm" id="hmTable"></table>
+  </div>
+  <div id="hmLegend" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+    <div style="font-family:Barlow Condensed,sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:12px;">Color Legend</div>
+    <div id="hmLegendItems" style="display:flex;flex-wrap:wrap;gap:18px;"></div>
   </div>
   <div id="hmMcdBars" style="display:none;">
     <div class="sec-title">Portfolio McDelivery &mdash; Restaurant Time by Hour</div>
@@ -317,7 +325,7 @@ var DATES=["May 10","May 11","May 12","May 13","May 14","May 15","May 16"];
 var MCD_DATES=["May 8","May 9","May 10","May 11","May 12","May 13","May 14"];
 var HOURS=[6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26];
 var GOAL_TPPH=6.0,GOAL_OEPE=120;
-var HM_KPI='tpph',HM_DATE='all',MCD_KPI='rest',MCD_DATE='all';
+var HM_KPI='tpph',HM_DATE='all',MCD_KPI='rest',MCD_DATE='all',HM_LOC='all';
 var LOC_DATE='all';
 
 var PORTFOLIO_KPIS={b_tpph:'7.66',l_tpph:'7.66',d_tpph:'6.19',b_oepe:'107s',l_oepe:'127s',d_oepe:'146s',peak:'9am\u201310am'};
@@ -403,6 +411,7 @@ function setHmKpi(kpi,btn){
   document.getElementById('hmDarDates').style.display=isMcd?'none':'flex';
   document.getElementById('hmMcdControls').style.display=isMcd?'flex':'none';
   document.getElementById('hmMcdBars').style.display=isMcd?'block':'none';
+  document.getElementById('hmLegend').style.display=isMcd?'none':'block';
   if(isMcd){renderMcdHeatmap();}else{renderHeatmap();}
 }
 function setHmDate(date,btn){
@@ -411,7 +420,99 @@ function setHmDate(date,btn){
   btn.classList.add('active');
   renderHeatmap();
 }
+function setHmLoc(val){
+  HM_LOC=val;
+  if(HM_KPI==='mcd'){renderMcdHeatmap();}else{renderHeatmap();}
+}
 
+var LEGEND_DEFS={
+  tpph:[
+    {color:'#0a5c28',label:'9.0+',desc:'Elite throughput'},
+    {color:'#1a7a4a',label:'7.0\u20138.9',desc:'Above goal'},
+    {color:'#f0c040',label:'6.0\u20136.9',desc:'At goal'},
+    {color:'#e08040',label:'5.0\u20135.9',desc:'Below goal'},
+    {color:'#c0392b',label:'<5.0',desc:'Needs attention'}
+  ],
+  oepe:[
+    {color:'#0a5c28',label:'\u2264100s',desc:'Well under goal'},
+    {color:'#1a7a4a',label:'101\u2013120s',desc:'At goal'},
+    {color:'#f0c040',label:'121\u2013150s',desc:'Slightly over'},
+    {color:'#e08040',label:'151\u2013200s',desc:'Over goal'},
+    {color:'#c0392b',label:'>200s',desc:'Significantly over'}
+  ],
+  gc:[
+    {color:'#0a5c28',label:'80+',desc:'High volume'},
+    {color:'#1a7a4a',label:'50\u201379',desc:'Strong volume'},
+    {color:'#f0c040',label:'25\u201349',desc:'Moderate volume'},
+    {color:'#e0ddd6',label:'<25',desc:'Low volume'}
+  ],
+  gc_pm:[
+    {color:'#0a5c28',label:'+20+',desc:'Significantly ahead'},
+    {color:'#1a7a4a',label:'+5 to +19',desc:'Ahead of prior'},
+    {color:'#f0c040',label:'\u22125 to +4',desc:'Flat'},
+    {color:'#e08040',label:'\u221220 to \u22126',desc:'Behind prior'},
+    {color:'#c0392b',label:'<\u221220',desc:'Significantly behind'}
+  ],
+  hvn:[
+    {color:'#1a7a4a',label:'\u00b15 hrs',desc:'On need'},
+    {color:'#c0392b',label:'>+5 hrs',desc:'Over scheduled'},
+    {color:'#c47b00',label:'<\u22125 hrs',desc:'Under scheduled'}
+  ]
+};
+
+function renderLegend(){
+  var el=document.getElementById('hmLegendItems');if(!el)return;
+  var defs=LEGEND_DEFS[HM_KPI];
+  if(!defs){el.innerHTML='';return;}
+  el.innerHTML=defs.map(function(d){
+    return '<div style="display:flex;align-items:center;gap:8px;">'+
+      '<div style="width:32px;height:20px;border-radius:4px;background:'+d.color+';flex-shrink:0;"></div>'+
+      '<div><div style="font-family:JetBrains Mono,monospace;font-size:11px;font-weight:700;color:var(--ink);">'+d.label+'</div>'+
+      '<div style="font-size:10px;color:var(--muted);">'+d.desc+'</div></div>'+
+    '</div>';
+  }).join('');
+}
+
+function renderHeatmap(){
+  var table=document.getElementById('hmTable');
+  var labels={tpph:'TPPH',oepe:'OEPE',gc:'Guest Counts',gc_pm:'GC +/-',hvn:'Hrs vs Need'};
+  var dLabel=HM_DATE==='all'?'All Days Avg':HM_DATE;
+  var locLabel=HM_LOC==='all'?'All Locations':(HM_LOC+' \u2014 '+(GM_MAP[HM_LOC]||''));
+  document.getElementById('hmTitle').textContent=labels[HM_KPI]+' Heatmap \u2014 '+dLabel+' \u2014 '+locLabel;
+  var locsToShow=HM_LOC==='all'?LOCS:[HM_LOC];
+  var validH=HOURS.filter(function(h){return locsToShow.some(function(l){return getHmVal(l,HM_DATE,h,HM_KPI)!==null;});});
+  var html='<tr><th class="loc-col">Location</th>';
+  validH.forEach(function(h){
+    var sh=shiftOf(h),hL=(h>12?h-12:h)+(h>=12?'p':'a');
+    html+='<th style="min-width:36px;color:'+shiftColor(sh)+';">'+hL+'</th>';
+  });
+  html+='</tr>';
+  locsToShow.forEach(function(loc){
+    var gm=GM_MAP[loc]||loc;
+    html+='<tr><td class="loc-name">'+loc+' <span style="font-size:10px;color:var(--muted);font-weight:400;">'+gm+'</span></td>';
+    validH.forEach(function(h){
+      var val=getHmVal(loc,HM_DATE,h,HM_KPI);
+      var bg=hmColor(val,HM_KPI),tc=val!==null?hmTextColor(val,HM_KPI):'#ccc',txt=val!==null?hmText(val,HM_KPI):'';
+      html+='<td style="background:'+bg+';color:'+tc+';">'+txt+'</td>';
+    });
+    html+='</tr>';
+  });
+  table.innerHTML=html;
+  renderLegend();
+}
+
+// Init heatmap location dropdown
+(function initHmLocSelect(){
+  var sel=document.getElementById('hmLocSelect');if(!sel)return;
+  var opt=document.createElement('option');opt.value='all';opt.textContent='All Locations';sel.appendChild(opt);
+  LOCS.forEach(function(loc){
+    var o=document.createElement('option');o.value=loc;
+    o.textContent=loc+' \u2014 '+(GM_MAP[loc]||'');
+    sel.appendChild(o);
+  });
+})();
+
+renderHeatmap();
 function getHmVal(loc,date,hour,kpi){
   var d=DAR[loc];if(!d)return null;
   var dates=date==='all'?DATES:[date];
@@ -448,32 +549,6 @@ function hmTextColor(val,kpi){
   if(kpi==='gc_pm')return (val>=5||val<=-5)?'#fff':'#1a1a2e';
   return '#1a1a2e';
 }
-function renderHeatmap(){
-  var table=document.getElementById('hmTable');
-  var labels={tpph:'TPPH',oepe:'OEPE',gc:'Guest Counts',gc_pm:'GC +/-',hvn:'Hrs vs Need'};
-  var dLabel=HM_DATE==='all'?'All Days Avg':HM_DATE;
-  document.getElementById('hmTitle').textContent=labels[HM_KPI]+' Heatmap \u2014 '+dLabel;
-  var validH=HOURS.filter(function(h){return LOCS.some(function(l){return getHmVal(l,HM_DATE,h,HM_KPI)!==null;});});
-  var html='<tr><th class="loc-col">Location</th>';
-  validH.forEach(function(h){
-    var sh=shiftOf(h),hL=(h>12?h-12:h)+(h>=12?'p':'a');
-    html+='<th style="min-width:36px;color:'+shiftColor(sh)+';">'+hL+'</th>';
-  });
-  html+='</tr>';
-  LOCS.forEach(function(loc){
-    var gm=GM_MAP[loc]||loc;
-    html+='<tr><td class="loc-name">'+loc+' <span style="font-size:10px;color:var(--muted);font-weight:400;">'+gm+'</span></td>';
-    validH.forEach(function(h){
-      var val=getHmVal(loc,HM_DATE,h,HM_KPI);
-      var bg=hmColor(val,HM_KPI),tc=val!==null?hmTextColor(val,HM_KPI):'#ccc',txt=val!==null?hmText(val,HM_KPI):'';
-      html+='<td style="background:'+bg+';color:'+tc+';">'+txt+'</td>';
-    });
-    html+='</tr>';
-  });
-  table.innerHTML=html;
-}
-renderHeatmap();
-
 // ---- MC DELIVERY ----
 function fmtRest(secs){
   if(!secs&&secs!==0)return '';
@@ -514,17 +589,19 @@ function getMcdVal(loc,hour,kpi){
 }
 function renderMcdHeatmap(){
   var table=document.getElementById('hmTable');if(!table)return;
-  var validH=HOURS.filter(function(h){return MCD_LOCS.some(function(l){return getMcdVal(l,h,MCD_KPI)!==null;});});
+  var locsToShow=HM_LOC==='all'?MCD_LOCS:[HM_LOC].filter(function(l){return MCD_LOCS.indexOf(l)>=0;});
+  var validH=HOURS.filter(function(h){return locsToShow.some(function(l){return getMcdVal(l,h,MCD_KPI)!==null;});});
   var dLabel=MCD_DATE==='all'?'All Days (May 8\u201314)':MCD_DATE;
   var metricLabel={rest:'Restaurant Time',gc:'Delivery GC',sales:'Delivery Sales'}[MCD_KPI];
-  document.getElementById('hmTitle').textContent='McDelivery \u2014 '+metricLabel+' \u2014 '+dLabel;
+  var locLabel=HM_LOC==='all'?'All Locations':(HM_LOC+' \u2014 '+(GM_MAP[HM_LOC]||''));
+  document.getElementById('hmTitle').textContent='McDelivery \u2014 '+metricLabel+' \u2014 '+dLabel+' \u2014 '+locLabel;
   var html='<tr><th class="loc-col">Location</th>';
   validH.forEach(function(h){
     var hL=(h>12?h-12:h)+(h>=12?'p':'a');
     html+='<th style="min-width:40px;color:var(--muted);">'+hL+'</th>';
   });
   html+='</tr>';
-  MCD_LOCS.forEach(function(loc){
+  locsToShow.forEach(function(loc){
     var gm=GM_MAP[loc]||loc;
     html+='<tr><td class="loc-name">'+loc+' <span style="font-size:10px;color:var(--muted);font-weight:400;">'+gm+'</span></td>';
     validH.forEach(function(h){
